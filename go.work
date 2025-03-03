@@ -1,0 +1,7 @@
+go 1.24
+
+use (
+    ./explore-service
+    ./e2e-tests
+    ./shared
+) 

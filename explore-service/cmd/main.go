@@ -1,0 +1,15 @@
+package main
+
+import (
+	"os"
+
+	"github.com/steve-westwood/explore-service/explore-service/internal/persistence"
+	"github.com/steve-westwood/explore-service/explore-service/internal/server"
+)
+
+func main() {
+	db := persistence.NewDB(os.Getenv("DATABASE_URL"))
+	recipientService := persistence.NewRecipientService(db)
+	grpcServer := server.NewServer(recipientService)
+	server.StartServer(grpcServer)
+}
