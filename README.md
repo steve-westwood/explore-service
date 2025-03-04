@@ -1,4 +1,4 @@
-#  Response to MUZZ Back-End Technical Test
+#  Explore Service
 
 ### Golang gRPC Microservice
 
