@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 
+	"github.com/steve-westwood/explore-service/src/app"
 	"github.com/steve-westwood/explore-service/src/explore_service"
 	"github.com/steve-westwood/explore-service/src/persistence"
 	"google.golang.org/grpc"
@@ -16,7 +17,13 @@ type Controllers struct {
 }
 
 func (s *Controllers) ListLikedYou(ctx context.Context, in *explore_service.ListLikedYouRequest) (*explore_service.ListLikedYouResponse, error) {
-	likedYouList, err := s.recipientService.ListLikedYou(in.RecipientUserId)
+	likeYouParams := &app.LikeYouParameters{
+		RecipientId: in.RecipientUserId,
+	}
+	if in.PaginationToken != nil && *in.PaginationToken != "" {
+		likeYouParams.PaginationToken = *in.PaginationToken
+	}
+	likedYouList, err := s.recipientService.ListLikedYou(likeYouParams)
 	if err != nil {
 		return nil, err
 	}
@@ -28,12 +35,20 @@ func (s *Controllers) ListLikedYou(ctx context.Context, in *explore_service.List
 		})
 	}
 	return &explore_service.ListLikedYouResponse{
-		Likers: likers,
+		Likers:              likers,
+		NextPaginationToken: &likedYouList.NextPaginationToken,
 	}, nil
 }
 
 func (s *Controllers) ListNewLikedYou(ctx context.Context, in *explore_service.ListLikedYouRequest) (*explore_service.ListLikedYouResponse, error) {
-	likedYouList, err := s.recipientService.ListNewLikedYou(in.RecipientUserId)
+
+	likeYouParams := &app.LikeYouParameters{
+		RecipientId: in.RecipientUserId,
+	}
+	if in.PaginationToken != nil && *in.PaginationToken != "" {
+		likeYouParams.PaginationToken = *in.PaginationToken
+	}
+	likedYouList, err := s.recipientService.ListNewLikedYou(likeYouParams)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +60,8 @@ func (s *Controllers) ListNewLikedYou(ctx context.Context, in *explore_service.L
 		})
 	}
 	return &explore_service.ListLikedYouResponse{
-		Likers: likers,
+		Likers:              likers,
+		NextPaginationToken: &likedYouList.NextPaginationToken,
 	}, nil
 }
 
@@ -60,7 +76,7 @@ func (s *Controllers) CountLikedYou(ctx context.Context, in *explore_service.Cou
 }
 
 func (s *Controllers) PutDecision(ctx context.Context, in *explore_service.PutDecisionRequest) (*explore_service.PutDecisionResponse, error) {
-	reciprocated, err := s.recipientService.PutDecision(in.RecipientUserId, in.ActorUserId, in.LikedRecipient)
+	reciprocated, err := s.recipientService.PutDecision(in.ActorUserId, in.RecipientUserId, in.LikedRecipient)
 	if err != nil {
 		return nil, err
 	}

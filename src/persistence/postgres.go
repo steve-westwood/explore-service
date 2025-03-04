@@ -2,12 +2,21 @@ package persistence
 
 import (
 	"database/sql"
+	"encoding/base64"
+	"errors"
+	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
 
 	"github.com/steve-westwood/explore-service/src/app"
+)
+
+const (
+	limit = 5
 )
 
 type RecipientService struct {
@@ -26,51 +35,103 @@ func NewRecipientService(db *sql.DB) RecipientService {
 	return RecipientService{db: db}
 }
 
-func (s *RecipientService) ListLikedYou(recipientId string) (*app.LikedYouList, error) {
+func (s *RecipientService) ListLikedYou(likeYouParams *app.LikeYouParameters) (*app.LikedYouList, error) {
 	var likers []app.Liker
-	rows, err := s.db.Query(`SELECT ActorId, Timestamp FROM Decisions
+	var rows *sql.Rows
+	var err2 error
+	if likeYouParams.PaginationToken != "" {
+		timestamp, decisionId, err := GetPaginationDetailsFromToken(likeYouParams.PaginationToken)
+		if err != nil {
+			return nil, err
+		}
+
+		rows, err2 = s.db.Query(`SELECT DecisionId, ActorId, Timestamp FROM Decisions
 						WHERE RecipientId = $1 AND Liked = TRUE
-						ORDER BY Timestamp DESC;`, recipientId)
-	if err != nil {
-		return nil, err
+						AND ((Timestamp = $2 AND DecisionId < $3) OR Timestamp < $4)
+						ORDER BY Timestamp, DecisionId DESC
+						LIMIT $5;`, likeYouParams.RecipientId, timestamp, decisionId, timestamp, limit)
+	} else {
+		rows, err2 = s.db.Query(`SELECT DecisionId, ActorId, Timestamp FROM Decisions
+						WHERE RecipientId = $1 AND Liked = TRUE
+						ORDER BY Timestamp, DecisionId DESC
+						LIMIT $2;`, likeYouParams.RecipientId, limit)
 	}
+
+	if err2 != nil {
+		return nil, err2
+	}
+
 	defer rows.Close()
+
+	decisionId := ""
+	lastTimestamp := uint64(0)
 
 	for rows.Next() {
 		var liker app.Liker
-		if err := rows.Scan(&liker.ActorID, &liker.TimeStamp); err != nil {
+		if err := rows.Scan(&decisionId, &liker.ActorID, &liker.TimeStamp); err != nil {
 			return nil, err
 		}
+		lastTimestamp = liker.TimeStamp
 		likers = append(likers, liker)
 	}
-
-	return &app.LikedYouList{
+	likedYouList := &app.LikedYouList{
 		Likers: &likers,
-	}, nil
+	}
+	if len(likers) == limit {
+		likedYouList.NextPaginationToken = GetPaginationToken(lastTimestamp, decisionId)
+	}
+	return likedYouList, nil
 }
 
-func (s *RecipientService) ListNewLikedYou(recipientId string) (*app.LikedYouList, error) {
+func (s *RecipientService) ListNewLikedYou(likeYouParams *app.LikeYouParameters) (*app.LikedYouList, error) {
 	var likers []app.Liker
-	rows, err := s.db.Query(`SELECT d.ActorId, d.Timestamp FROM Decisions d
+	var rows *sql.Rows
+	var err2 error
+	if likeYouParams.PaginationToken != "" {
+		timestamp, decisionId, err := GetPaginationDetailsFromToken(likeYouParams.PaginationToken)
+		if err != nil {
+			return nil, err
+		}
+
+		rows, err2 = s.db.Query(`SELECT d.DecisionId, d.ActorId, d.Timestamp FROM Decisions d
 						LEFT JOIN Decisions r ON d.RecipientId = r.ActorId AND d.ActorId = r.RecipientId
 						WHERE d.RecipientID=$1 AND d.Liked = TRUE AND r.DecisionId IS NULL
-						ORDER BY d.Timestamp DESC;`, recipientId)
-	if err != nil {
-		return nil, err
+						AND ((d.Timestamp = $2 AND d.DecisionId < $3) OR d.Timestamp < $4)
+						ORDER BY d.Timestamp, d.DecisionId DESC
+						LIMIT $5;`, likeYouParams.RecipientId, timestamp, decisionId, timestamp, limit)
+	} else {
+		rows, err2 = s.db.Query(`SELECT d.DecisionId, d.ActorId, d.Timestamp FROM Decisions d
+						LEFT JOIN Decisions r ON d.RecipientId = r.ActorId AND d.ActorId = r.RecipientId
+						WHERE d.RecipientID=$1 AND d.Liked = TRUE AND r.DecisionId IS NULL 
+						ORDER BY d.Timestamp, d.DecisionId DESC
+						LIMIT $2;`, likeYouParams.RecipientId, limit)
 	}
+
+	if err2 != nil {
+		return nil, err2
+	}
+
 	defer rows.Close()
+
+	decisionId := ""
+	lastTimestamp := uint64(0)
 
 	for rows.Next() {
 		var liker app.Liker
-		if err := rows.Scan(&liker.ActorID, &liker.TimeStamp); err != nil {
+		if err := rows.Scan(&decisionId, &liker.ActorID, &liker.TimeStamp); err != nil {
 			return nil, err
 		}
+		lastTimestamp = liker.TimeStamp
 		likers = append(likers, liker)
 	}
 
-	return &app.LikedYouList{
+	likedYouList := &app.LikedYouList{
 		Likers: &likers,
-	}, nil
+	}
+	if len(likers) == limit {
+		likedYouList.NextPaginationToken = GetPaginationToken(lastTimestamp, decisionId)
+	}
+	return likedYouList, nil
 }
 
 func (s *RecipientService) CountLikedYou(recipientId string) (int64, error) {
@@ -99,4 +160,24 @@ func (s *RecipientService) PutDecision(actorId string, recipientId string, liked
 		log.Fatalf("insert error: %s", err)
 	}
 	return reciprocated, nil
+}
+
+func GetPaginationToken(timestamp uint64, recipientId string) string {
+	return base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d:%s", timestamp, recipientId)))
+}
+
+func GetPaginationDetailsFromToken(paginationToken string) (uint64, string, error) {
+	decoded, err := base64.StdEncoding.DecodeString(paginationToken)
+	if err != nil {
+		return 0, "", err
+	}
+	parts := strings.Split(string(decoded), ":")
+	if len(parts) != 2 {
+		return 0, "", errors.New("invalid pagination token")
+	}
+	timestamp, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, "", err
+	}
+	return uint64(timestamp), parts[1], nil
 }
