@@ -111,10 +111,6 @@ This will execute all test cases within the project.
 
 ### Extending the Project
 
-#### Pagination
-
-I didn't have enough time to implement pagination for the `ListLikedYou` and `ListNewLikedYou` endpoints. This requirement would show the microservice's performance for high usage customers.
-
 #### End-to-End Tests
 
 To extend this microservice with end-to-end (E2E) tests, you could create a separate Go project that acts as a gRPC client and tests the containerized service locally. Although expensive, this test would be highly valuable for testing data integrity and performance. 
