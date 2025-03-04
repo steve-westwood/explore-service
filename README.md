@@ -55,11 +55,7 @@ The server address is `localhost:9000`.
 
 ### Verify the Services
 
-Once the services are up and running, you can verify the gRPC server is running using a gRPC client 
-
-```
-grpcurl -plaintext -d '{"recipient_id": "123e4567-e89b-12d3-a456-426614174000"}' localhost:9000 ExploreService/ListLikedYou
-```
+Once the services are up and running, you can verify the gRPC server is running using a gRPC client
 
 ### Design
 
@@ -113,7 +109,7 @@ This will execute all test cases within the project.
 
 #### End-to-End Tests
 
-To extend this microservice with end-to-end (E2E) tests, you could create a separate Go project that acts as a gRPC client and tests the containerized service locally. Although expensive, this test would be highly valuable for testing data integrity and performance. 
+To extend this microservice with end-to-end (E2E) tests, you could create a separate Go project that acts as a gRPC client and tests the containerized service locally. Although expensive, this test would be highly valuable for testing data coming in and out of the database. 
 
 #### Logging and Metrics
 
